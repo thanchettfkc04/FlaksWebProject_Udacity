@@ -61,13 +61,14 @@ def post(id):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
+        app.logger.info('Microsft account is logged in successfully')
         return redirect(url_for('home'))
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
         if user is None or not user.check_password(form.password.data):
-            app.logger.info('Invalid login attempt')
             flash('Invalid username or password')
+            app.logger.info('Invalid login attempt')
             return redirect(url_for('login'))
         login_user(user, remember=form.remember_me.data)
         app.logger.info('ADMIN Logged in successfully')
@@ -84,6 +85,7 @@ def authorized():
     if request.args.get('state') != session.get("state"):
         return redirect(url_for("home"))  # No-OP. Goes back to Index page
     if "error" in request.args:  # Authentication/Authorization failure
+        app.logger.error('Please re-authenticate, failed when logged in with microsoft account')
         return render_template("auth_error.html", result=request.args)
     if request.args.get('code'):
         cache = _load_cache()
@@ -94,12 +96,14 @@ def authorized():
                 redirect_uri=url_for('authorized', _external=True, _scheme='https'))
         # result = None
         if "error" in result:
+            app.logger.error('Please re-authenticate, failed when logged in with microsoft account')
             return render_template("auth_error.html", result=result)
         session["user"] = result.get("id_token_claims")
         # Note: In a real app, we'd use the 'name' property from session["user"] below
         # Here, we'll use the admin username for anyone who is authenticated by MS
         user = User.query.filter_by(username="admin").first()
         login_user(user)
+        app.logger.info('Successfully authenticated with microsoft account')
         _save_cache(cache)
     return redirect(url_for('home'))
 
@@ -109,6 +113,7 @@ def logout():
     if session.get("user"): # Used MS Login
         # Wipe out user and its token cache from session
         session.clear()
+        app.logger.info('Successfully logged out')
         # Also logout from your tenant's web session
         return redirect(
             Config.AUTHORITY + '/oauth2/v2.0/logout' +
